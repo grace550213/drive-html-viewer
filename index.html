@@ -87,13 +87,6 @@
   .btn-primary { background: var(--accent); color: var(--accent-ink); }
   .btn-quiet { background: transparent; color: var(--ink); border-color: var(--line); }
 
-  .settings { margin-top: 12px; color: var(--muted); font-size: .9375rem; }
-  .settings summary { cursor: pointer; width: fit-content; }
-  .settings-body { margin-top: 10px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); max-width: 640px; }
-  .settings-body .row { display: flex; gap: 8px; flex-wrap: wrap; }
-  .settings-body .row input { flex: 1; min-width: 220px; }
-  .settings-body p { margin: 10px 0 0; }
-  .settings-body a { color: var(--accent); }
 
   .status { min-height: 1.6em; margin: 14px 0 0; font-size: .9375rem; color: var(--muted); }
   .status[data-kind="error"] { color: var(--danger); }
@@ -192,17 +185,6 @@
     <button type="submit" class="btn-primary" id="loadBtn">載入網頁</button>
   </form>
 
-  <!-- <details class="settings" id="settings">
-    <summary>API 金鑰設定</summary>
-    <div class="settings-body">
-      <div class="row">
-        <input type="password" id="keyInput" autocomplete="off" spellcheck="false" aria-label="Google API 金鑰">
-        <button type="button" class="btn-primary" id="saveKey">儲存金鑰</button>
-        <button type="button" class="btn-quiet" id="clearKey">清除</button>
-      </div>
-      <p>讀取雲端硬碟檔案需要一把啟用了 Google Drive API 的金鑰。金鑰只存在這台裝置的瀏覽器裡；若想讓別人打開分享連結時不必自己輸入，請把金鑰寫進原始碼最上方的 <code>BUILT_IN_API_KEY</code>，並在 Google Cloud 限制它只能從你的 GitHub Pages 網址使用。</p>
-    </div>
-  </details> -->
 
   <p class="status" id="status" role="status" aria-live="polite"></p>
 
@@ -220,7 +202,6 @@
         <div>
           <h2>開始使用</h2>
           <ol>
-            <!-- <li>在上方「API 金鑰設定」填入啟用 Google Drive API 的金鑰。</li> -->
             <li>到雲端硬碟把 HTML 檔的一般存取權設為「知道連結的任何人」。</li>
             <li>複製共用連結，貼到上方欄位後按「載入網頁」。</li>
           </ol>
@@ -238,35 +219,13 @@
 </main>
 
 <script>
-/* 想讓別人開分享連結時免輸入金鑰，就把金鑰填在這裡（記得在 Google Cloud 設定網站限制） */
-const BUILT_IN_API_KEY = 'AIzaSyDtn0DZufW8JGhPg6qIzjVR1wUz1WHe7mw';
+/* 把 Google Drive API 金鑰填在引號裡（記得在 Google Cloud 設定網站限制與 API 限制） */
+const API_KEY = 'AIzaSyDtn0DZufW8JGhPg6qIzjVR1wUz1WHe7mw';
 
-const STORAGE_KEY = 'driveHtmlViewer.apiKey';
 const $ = (id) => document.getElementById(id);
 const viewer = $('viewer'), frame = $('frame'), statusEl = $('status');
 
 let current = null; // { id, rk, name }
-
-/* ---------- API key ---------- */
-function storedKey() {
-  try { return localStorage.getItem(STORAGE_KEY) || ''; } catch { return ''; }
-}
-function activeKey() { return storedKey() || BUILT_IN_API_KEY; }
-function refreshKeyField() {
-  $('keyInput').value = storedKey();
-  $('keyInput').placeholder = BUILT_IN_API_KEY ? '正在使用頁面內建的金鑰' : '貼上 API 金鑰（AIza 開頭）';
-}
-$('saveKey').addEventListener('click', () => {
-  const v = $('keyInput').value.trim();
-  if (!v) { setStatus('error', '金鑰欄位是空的，請貼上金鑰後再儲存。'); return; }
-  try { localStorage.setItem(STORAGE_KEY, v); setStatus('ok', '金鑰已儲存在這台裝置。'); }
-  catch { setStatus('error', '瀏覽器不允許儲存資料，金鑰只會在這次瀏覽期間有效。'); }
-});
-$('clearKey').addEventListener('click', () => {
-  try { localStorage.removeItem(STORAGE_KEY); } catch {}
-  refreshKeyField();
-  setStatus('ok', '已清除這台裝置上的金鑰。');
-});
 
 /* ---------- Helpers ---------- */
 function setStatus(kind, text) {
@@ -338,11 +297,9 @@ function viewerUrl({ id, rk }, full) {
 
 /* ---------- Load & render ---------- */
 async function loadPage(target, { full = false } = {}) {
-  const key = activeKey();
+  const key = API_KEY.trim();
   if (!key) {
-    $('settings').open = true;
-    $('keyInput').focus();
-    setStatus('error', '還沒有設定 API 金鑰。請先在「API 金鑰設定」貼上金鑰。');
+    setStatus('error', '原始碼裡的 API_KEY 還是空的，請填入 Google Drive API 金鑰後重新部署。');
     return;
   }
   $('loadBtn').disabled = true;
@@ -452,7 +409,6 @@ $('copyLink').addEventListener('click', async () => {
 });
 
 /* ---------- Start: open ?id=… directly ---------- */
-refreshKeyField();
 (function boot() {
   const p = new URLSearchParams(location.search);
   const id = p.get('id');
