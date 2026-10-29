@@ -295,6 +295,70 @@ function viewerUrl({ id, rk }, full) {
   return u.toString();
 }
 
+/* ---------- Fragment links inside the sandboxed page ----------
+   srcdoc 網頁沒有自己的網址，相對連結（包括 #part3）會以檢視器的網址為基準，
+   點下去會把 iframe 導回檢視器本身。這段程式會注入到載入的網頁最前面，
+   把「同一頁的 # 連結」與 pushState/replaceState 改成在網頁內部跳轉。 */
+function srcdocFragmentShim(FILE) {
+  function fragmentOf(raw) {
+    if (raw == null) return null;
+    raw = String(raw).trim();
+    var i = raw.indexOf('#');
+    if (i < 0) return null;
+    var path = raw.slice(0, i).split('?')[0];
+    if (path && path.toLowerCase() !== 'about:srcdoc') {
+      if (/^[a-z][a-z0-9+.-]*:/i.test(path) || path.indexOf('//') === 0) return null; // 指向別的網站
+      var seg = path.split('/').pop();
+      try { seg = decodeURIComponent(seg); } catch (e) {}
+      if (seg !== FILE) return null; // 指向別的檔案
+    }
+    return raw.slice(i + 1);
+  }
+
+  function goTo(frag) {
+    var id = frag;
+    try { id = decodeURIComponent(frag); } catch (e) {}
+    try { location.hash = frag; } catch (e) {} // 觸發 hashchange 與 :target
+    var el = document.getElementById(id) || document.getElementsByName(id)[0];
+    if (el && el.scrollIntoView) el.scrollIntoView();
+  }
+
+  document.addEventListener('click', function (e) {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var a = e.target && e.target.closest ? e.target.closest('a[href], area[href]') : null;
+    if (!a) return;
+    var target = (a.getAttribute('target') || '').toLowerCase();
+    if (target && target !== '_self') return;
+    var frag = fragmentOf(a.getAttribute('href'));
+    if (frag === null) return;
+    e.preventDefault();
+    if (frag) goTo(frag);
+  }, true);
+
+  ['pushState', 'replaceState'].forEach(function (method) {
+    var original = history[method];
+    history[method] = function (state, title, url) {
+      try {
+        if (url === undefined || url === null) return original.call(history, state, title);
+        var frag = fragmentOf(url);
+        if (frag !== null) return original.call(history, state, title, 'about:srcdoc' + (frag ? '#' + frag : ''));
+        return original.call(history, state, title, url);
+      } catch (e) {
+        // 沙盒裡無法改寫成這個網址；略過，避免中斷網頁本身的程式
+      }
+    };
+  });
+}
+
+function withFragmentFix(html, fileName) {
+  var arg = JSON.stringify(fileName).replace(/</g, '\\u003c');
+  var tag = '<script>(' + srcdocFragmentShim.toString() + ')(' + arg + ');<\/script>';
+  var m = html.match(/<head\b[^>]*>/i) || html.match(/<html\b[^>]*>/i) || html.match(/<!doctype[^>]*>/i);
+  if (!m) return tag + html;
+  var at = m.index + m[0].length;
+  return html.slice(0, at) + tag + html.slice(at);
+}
+
 /* ---------- Load & render ---------- */
 async function loadPage(target, { full = false } = {}) {
   const key = API_KEY.trim();
@@ -317,7 +381,7 @@ async function loadPage(target, { full = false } = {}) {
     const html = await (await driveRequest(target.id, target.rk, key, 'alt=media')).text();
 
     current = { id: target.id, rk: target.rk, name };
-    frame.srcdoc = html;
+    frame.srcdoc = withFragmentFix(html, name);
     viewer.classList.add('has-page');
     $('fileName').textContent = name;
     $('link').value = 'https://drive.google.com/file/d/' + target.id + '/view' + (target.rk ? '?resourcekey=' + target.rk : '');
